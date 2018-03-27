@@ -1,35 +1,66 @@
 version: 2
 jobs:
-  one:
-    docker:
-      - image: circleci/ruby:2.4.1
+  users-api-tests:
+    machine:
+      services:
+        - docker
+    working_directory: ~/repo
     steps:
       - checkout
-      - run: echo "A first hello"
-      - run: mkdir -p my_workspace
-      - run: echo "Trying out workspaces" > my_workspace/echo-output
-      - persist_to_workspace:
-          # Must be an absolute path, or relative path from working_directory
-          root: my_workspace
-          # Must be relative path from root
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ checksum "build.gradle" }}
+          # fallback to using the latest cache if no exact match is found
+          - v1-dependencies-
+      - run:
+          name: Install Docker Compose
+          command: |
+                curl -L https://github.com/docker/compose/releases/download/1.11.2/docker-compose-`uname -s`-`uname -m` > ~/docker-compose
+                chmod +x ~/docker-compose
+                sudo mv ~/docker-compose /usr/local/bin/docker-compose
+      - save_cache:
           paths:
-            - echo-output      
-  two:
-    docker:
-      - image: circleci/ruby:2.4.1
-    steps:
-      - checkout
-      - run: echo "A more familiar hi"  
-      - attach_workspace:
-          # Must be absolute path or relative path from working_directory
-          at: my_workspace
-
-      - run: | ./gradlew allTests
+            - ~/cache
+          key: v1-dependencies-{{ checksum "build.gradle" }}
+      # run tests!
+      - run:
+          name: Run Tests
+          command: |
+              cd users-api
+              ./gradlew test
+  feature-tests:
+      machine:
+        services:
+          - docker
+      working_directory: ~/repo
+      steps:
+        - checkout
+        # Download and cache dependencies
+        - restore_cache:
+            keys:
+            - v1-dependencies-{{ checksum "build.gradle" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+        - run:
+            name: Install Docker Compose
+            command: |
+                  curl -L https://github.com/docker/compose/releases/download/1.11.2/docker-compose-`uname -s`-`uname -m` > ~/docker-compose
+                  chmod +x ~/docker-compose
+                  sudo mv ~/docker-compose /usr/local/bin/docker-compose
+        - save_cache:
+            paths:
+              - ~/cache
+            key: v1-dependencies-{{ checksum "build.gradle" }}
+        # run tests!
+        - run:
+            name: Run Tests
+            command: ./gradlew test
 workflows:
   version: 2
-  one_and_two:
+  all-tests:
     jobs:
-      - one
-      - two:
+      - users-api-tests
+      - feature-tests:
           requires:
-            - one
+            - users-api-tests
